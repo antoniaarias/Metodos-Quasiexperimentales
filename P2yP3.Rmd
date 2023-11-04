@@ -1,0 +1,326 @@
+---
+title:  'Proyecto 2'
+output:
+  html_document: 
+    theme: simplex
+    highlight: tango
+  pdf_document: default
+  always_allow_html: true
+  encoding: UTF-8
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+::: {style="text-align: center"}
+**Ingeniería Civil Industrial**
+:::
+
+::: {style="text-align: center"}
+**U. de Chile**
+:::
+
+::: {style="text-align: center"}
+**IN5244**: Ciencia de los Datos
+:::
+
+::: {style="text-align: center"}
+**Integrantes**: Tomás Aguirre, Antonia Arias, Daniel Jara, Nicolás Pacheco, Arturo Salinas
+:::
+
+::: {style="text-align: center"}
+**Prof**: Pablo Muñoz
+:::
+
+::: {style="text-align: center"}
+**Auxs**: Alexandra M. y Rienzi R.
+:::
+
+::: {style="text-align: center"}
+**Fecha**: Septiembre de 2023
+:::
+
+```{=html}
+<style type="text/css">
+.main-container {
+  max-width: 90%;
+  margin-left: auto;
+  margin-right: auto;
+}
+body {
+text-align: justify;
+font-family: Helvetica;
+  font-size: 12pt;}
+h1{
+  font-size: 24pt;
+}
+h2{
+  font-size: 20pt;
+}
+h3{
+  font-size: 16pt;
+}
+h4{
+  font-size: 14pt;
+}
+
+table, th, td {
+    font-size: 12px;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r, warning=FALSE}
+rm(list = ls())
+library(readr)
+library(dplyr)
+
+```
+
+# Desarrollo {.tabset}
+
+
+## Regresión Discontinua
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(haven)
+library(rdd)
+library(ivreg)
+library(stargazer)
+
+#Importando la base de datos:
+db <- read_csv("rdfuzzy.csv")
+db$psu <- floor(db$psu)
+```
+
+### (a)
+```{r}
+#Colapsando:
+db2 <- db %>%
+  group_by(psu) %>%
+  summarize(entercollege = mean(entercollege), over475=mean(over475), loantakeup=mean(loantakeup))
+```
+
+
+```{r}
+#Gráfico 1:
+ggplot(data = db2, aes(x = psu, y = entercollege)) +
+  geom_point() +
+  labs(x = "psu", y = "entercollege") +
+  ggtitle("Entrar a la universidad vs puntaje psu") +
+  geom_vline(xintercept = 475, linetype = "dashed", color = "red")
+```
+
+
+```{r}
+#Gráfico 2:
+ggplot(data = db2, aes(x = psu, y = loantakeup)) +
+  geom_point() +
+  labs(x = "psu", y = "loantakeup") +
+  ggtitle("Aceptar préstamo vs puntaje psu") +
+  geom_vline(xintercept = 475, linetype = "dashed", color = "red")
+```
+
+### (b)
+```{r}
+#Base de datos considerando ancho de banda de 50 puntos psu:
+db2_v50 <- db2 %>% subset(psu >= 475-50 & psu <= 475+50)
+```
+
+
+```{r}
+#Centramos la base de datos, con tal de que el puntaje corte sea 0:
+db2_v50_centrada <- db2_v50
+db2_v50_centrada$psu <- db2_v50_centrada$psu - 475
+```
+
+
+```{r}
+#Modelos OLS pedidos:
+model_loantakeup <-lm(loantakeup ~ psu + over475 + psu:over475, data=db2_v50_centrada)
+model_entercollege <-lm(entercollege ~ psu + over475 + psu:over475, data=db2_v50_centrada)
+```
+
+
+```{r}
+#Representación visual:
+stargazer(model_loantakeup,model_entercollege, title = "Tabla de Regresiones", type= "text")
+stargazer(model_loantakeup,model_entercollege, title = "Tabla de Regresiones", out= "tabla_regs.html")
+```
+
+### (c)
+```{r}
+#Chequeando supuesto de instrumento relevante:
+correlacion_instrumento <- cor(db2_v50_centrada$loantakeup, db2_v50_centrada$over475)
+```
+
+
+```{r}
+#Instrumento: Z=over475
+#Var.Endogena: X=loantakeup
+#Var.Dependiente: Y=entercollege
+#Controles: psu, psu*over475
+
+#Primera etapa:
+a <-lm(loantakeup ~ psu + over475 + psu:over475, data=db2_v50_centrada)
+
+#Forma reducida:
+b <-lm(entercollege ~ psu + over475 + psu:over475, data=db2_v50_centrada)
+
+#2SLS:
+c <-ivreg(entercollege ~ loantakeup + psu + psu:over475|over475 + psu + psu:over475, data = db2_v50_centrada)
+```
+
+
+```{r}
+#Representación visual:
+stargazer(a,b,c, title = "Tabla de Regresiones", type= "text")
+stargazer(a,b,c, title = "Tabla de Regresiones", out= "tabla_regs.html")
+
+```
+
+
+## Readmisión hospitalaria
+
+### a)
+
+```{r Comprobación de NA}
+readmissions <- read_csv("readmissions.csv", show_col_types = FALSE)
+df <- readmissions #Copiamos el dataset para trabajar con él
+#Primero comprobamos que no hayan valores faltantes en el dataset.
+cantidad_na <- sum(is.na(readmissions))
+print(cantidad_na)
+```
+
+```{r Estandarización de age}
+# Estandarizar la columna "age"
+mean_age <- mean(df$age, na.rm = TRUE)
+sd_age <- sd(df$age, na.rm = TRUE)
+
+df$x <- (df$age - mean_age) / sd_age
+```
+
+```{r Modelos}
+modelo_1 <- lm(readmission1m ~ x, data = df)
+modelo_2 <- lm(readmission1m ~ x + I(x^2), data = df)
+modelo_3 <- lm(readmission1m ~ x + I(x^2) + I(x^3), data = df)
+modelo_4 <- lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4), data = df)
+modelo_5 <- lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4) + sex + publicinsurance, data = df)
+modelo_6 <- lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4) + lengthstay + surgery, data = df)
+```
+
+
+```{r Cálculo de RMSE}
+# Suponiendo que tienes los modelos ya definidos
+modelos <- list(M1=modelo_1, M2=modelo_2, M3=modelo_3, M4=modelo_4, M5=modelo_5, M6=modelo_6)
+
+# Calcular el RMSE para cada modelo
+rmse_values <- sapply(modelos, function(model) {
+  sqrt(mean(model$residuals^2))
+})
+
+# Crear un dataframe con los nombres de los modelos y los RMSE
+rmse_df <- data.frame(Modelo = names(modelos), RMSE = rmse_values)
+
+# Ordenar el dataframe por RMSE
+rmse_df <- rmse_df[order(rmse_df$RMSE), ]
+
+# Imprimir el dataframe ordenado
+print(rmse_df)
+```
+
+### b)
+```{r K-folds}
+library(caret)
+
+set.seed(314159) 
+folds <- createFolds(df$readmission1m, k = 5, list = TRUE, returnTrain = FALSE)
+
+```
+
+```{r}
+predicciones_modelos <- vector("list", 7) # Para 6 modelos
+
+# Hacer un ciclo for que recorra los 5 folds
+for (i in 1:5) {
+  # Obtener los índices del fold de prueba actual
+  fold_indices <- folds[[i]]
+  
+  # Crear datos de entrenamiento y prueba
+  datos_entrenamiento <- df[-fold_indices, ]
+  datos_prueba <- df[fold_indices, ]
+  
+  # Ajustar cada uno de los 6 modelos en los datos de entrenamiento
+  modelos <- list(
+    modelo1 = lm(readmission1m ~ x, data = datos_entrenamiento),
+    modelo2 = lm(readmission1m ~ x + I(x^2), data = datos_entrenamiento),
+    modelo3 = lm(readmission1m ~ x + I(x^2) + I(x^3), data = datos_entrenamiento),
+    modelo4 = lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4), data = datos_entrenamiento),
+    modelo5 = lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4) + sex + publicinsurance, data = datos_entrenamiento),
+    modelo6 = lm(readmission1m ~ x + I(x^2) + I(x^3) + I(x^4) + lengthstay + surgery, data = datos_entrenamiento),
+    
+    # Se agrega el modelo de la última pregunta
+    modelo_creado = glm(readmission1m ~ immigrant, family = binomial(link = "probit") ,data = datos_entrenamiento)
+  )
+    
+  # Guardar las predicciones con los datos de prueba  
+  predicciones_fold <- lapply(modelos, function(modelo) {
+  predict(modelo, newdata = datos_prueba, type = "response")
+})
+
+    
+  # Almacenar las predicciones en la lista de predicciones
+  # OJO: Lo que hace es concatenar las predicciones con el fold-1, fold-2....
+  for (j in 1:7) {
+    predicciones_modelos[[j]] <- c(predicciones_modelos[[j]], predicciones_fold[[j]])
+  }
+}
+```
+
+```{r}
+# Calcular el error rmse 
+rmse_modelos <- sapply(predicciones_modelos, function(predicciones) {
+  sqrt(mean((df$readmission1m - predicciones)^2))
+})
+# Obtener el mínimo
+rmse_modelos
+
+# [1] 0.2930783 0.2933401 0.2933421 0.2933605 0.2937547 0.2986004 0.2923901
+
+
+# Descontando el modelo creado (último elemento), el minimo es el modelo 1
+cat("El mejor error es:", rmse_modelos[1], "del modelo 1")
+
+```
+
+```{r}
+# Se grafica las predicciones del mejor modelo (modelo 1) de k-folds contra la edad.
+predicciones_mejor_modelo <- predict(modelo_1, newdata = df, type = "response")
+
+# Graficar la probabilidad de reingreso contra la edad
+  plot(df$x, predicciones_mejor_modelo, xlab = "Edad estandarizada", ylab = "Probabilidad de Reingreso", main = paste("Probabilidad de reingreso v/s edad"))
+  
+
+```
+
+
+Finalmente, se debe notar que la creación del modelo por nuestra cuenta se encuentra en la línea 164, esto se hace así por la simplicidad que significaba agregar un nuevo modelo. El modelo que se planteó es el siguiente:
+
+```{r}
+modelo_creado = glm(readmission1m ~ immigrant, family = binomial(link = "probit") ,data = datos_entrenamiento)
+```
+
+Que tiene un RMSE de 0.2923901 (obtenido en el elemento 7 de rmse_modelos, que se printea en la línea 190)
+
+
+
+

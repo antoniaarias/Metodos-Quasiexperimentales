@@ -1,0 +1,272 @@
+---
+title: "P1"
+output: html_document
+date: "2023-09-04"
+---
+
+(a)
+
+```{r}
+
+require(pacman)
+pacman:: p_load(raster, rgdal, rgeos, tidyverse, sf)
+
+```
+
+
+
+```{r}
+#cargar datos
+maps <- shapefile('comunas.shp')
+```
+
+
+```{r}
+
+urg <- read.csv("urgencias.csv")
+
+# Filter for the "Metropolitana de Santiago" region
+library(dplyr)
+
+# Assuming you want to keep rows where fecha ends with "2018" and region is "Metropolitana de Santiago"
+urg <- urg %>%
+  filter(region == "Metropolitana de Santiago") #enunciado dice 2018 pero
+
+
+# Sum the values of three columns and group by 'county_name'
+urg <- urg %>%
+  group_by(county_name) %>%
+  summarize(Total = sum(causa_respiratoria,causa_circulatoria,causa_polytraumatismo))
+
+urg <- urg %>%
+  rename(Comuna = county_name)
+
+```
+```{r}
+#Solamente vemos las comunas de la región metropolitana
+maps <- subset(maps, Region == "Región Metropolitana de Santiago")
+```
+
+
+
+
+
+```{r}
+names(maps)
+as.vector(maps$Comuna[1:5])
+
+as.vector(urg$Comuna[1:5])
+
+
+
+```
+
+
+```{r}
+maps  = maps[order(as.vector(maps$Comuna)),]
+urg  = urg[order(as.vector(maps$Comuna)),]
+as.vector(maps$Comuna[1:5])
+as.vector(urg$Comuna[1:5])
+
+
+# merge together the shapefile data and the csv data based on common variable, here called 'station' - we MUST use the duplicateGeoms argument because there are multiple values for the same station name
+merged = sp::merge(maps,urg,by='Comuna', duplicateGeoms = TRUE)
+
+```
+```{r}
+
+
+library(RColorBrewer)
+
+# Now let's use brewer.pal from RColorBrewer to create a blues color pallette
+mycolours <- brewer.pal(9, "Reds")
+spplot(obj = merged, zcol = "Total", par.settings = list(axis.line = list(col ="grey")), main = "Numero Total de Urgencias de las Comunas de la R.M.", cuts = 5, col ="grey", col.regions = mycolours)
+
+```
+
+
+(b)
+```{r}
+#igualamos las notaciones de las comunas
+
+urg <- read.csv("urgencias.csv")
+cuar <- read.csv("Cuarentenas.csv")
+# Function to convert to lowercase and remove spaces
+clean_and_standardize <- function(data) {
+  data <- tolower(data)
+  data <- gsub(" ", "", data)
+  return(data)
+}
+
+# Apply the cleaning function to 'urg$county_name'
+urg$county_name <- clean_and_standardize(urg$county_name)
+
+# Apply the cleaning function to 'cuar$nombre'
+cuar$nombre <- clean_and_standardize(cuar$nombre)
+
+
+
+
+urg$county_name <- str_replace(urg$county_name, "aisén", "aysén")
+
+urg$county_name <- str_replace(urg$county_name, "quilpue", "quilpué")
+
+urg$county_name <- str_replace(urg$county_name, "tome", "tomé")
+
+urg$county_name <- str_replace(urg$county_name, "calera", "caleradetango")
+
+urg$county_name <- str_replace(urg$county_name, "buin", "buín")
+
+cuar$nombre <- str_replace(cuar$nombre, "peñalolen", "peñalolén")
+
+cuar$nombre <- str_replace(cuar$nombre, "inpendencia", "independencia")
+
+
+
+
+# Obtener los nombres únicos después de la corrección
+comuna <- unique(urg$county_name)
+comuna2 <- unique(cuar$nombre)
+
+# Contar los valores compartidos
+shared_values <- length(intersect(comuna, comuna2))
+
+# Contar los valores únicos totales en cada conjunto de datos
+total_values_urg <- length(comuna)
+total_values_cuar <- length(comuna2)
+
+# Imprimir los resultados
+cat("Shared Values:", shared_values, "\n")
+cat("Total Values in urg dataset:", total_values_urg, "\n")
+cat("Total Values in cuar dataset:", total_values_cuar, "\n")
+# Calculate values unique to 'urg' dataset
+
+```
+
+
+
+```{r}
+
+# Assuming you have your data in a data frame called 'df'
+
+# Find the date of the first event for each row
+# Assuming the date columns start from the 4th column (index 3)
+first_event_date <- apply(cuar[, 4:ncol(cuar)], 1, function(row) {
+  first_event_index <- which(row == 1)
+  if (length(first_event_index) > 0) {
+    return(colnames(cuar)[first_event_index[1] + 3])  # +3 to account for 3 non-date columns
+  } else {
+    return(NA)  # No event found
+  }
+})
+
+# Create a new data frame with the desired columns
+subset_df <- cuar[, c('comuna','nombre')]
+
+# Add the 'first_event_date' column to the subset
+subset_df$first_event_date <- first_event_date
+
+subset_df$first_event_date <- as.Date(substring(subset_df$first_event_date, 2), format = "%d.%m.%Y")
+
+
+```
+
+
+```{r}
+# Remove lowercase letters and spaces from 'county_name' and 'nombre' columns in 'urg' data frame
+# Rename the 'county_name' column to 'comuna' in the 'urg' data frame
+
+# Rename the 'county_name' column to 'comuna' in the 'urg' data frame
+colnames(urg)[colnames(urg) == "county_name"] <- "comuna"
+
+colnames(subset_df)[colnames(subset_df) == "comuna"] <- "comuna_id"
+
+# Rename the 'nombre' column to 'comuna' in the 'cuar' data frame
+colnames(subset_df)[colnames(subset_df) == "nombre"] <- "comuna"
+
+head(urg)
+head(subset_df)
+# Assuming you have already renamed the 'comuna' column in both data frames
+# If not, you can use the colnames() approach as shown in your original code
+
+# Join df1 and df2 to create column2 in df1
+merged <- urg %>%
+  left_join(subset_df, by = c("comuna" = "comuna"))
+
+
+# Replace 'new_column_from_cuar' with the actual name of the column you want to add
+
+# The merged_df data frame will contain the merged result based on the specified columns
+
+
+# Print the variable type (class) of the "fecha" column
+
+
+```
+
+
+(c)
+```{r}
+# Assuming you have a data frame named 'merged' with columns 'fecha' and 'first_event_date'
+
+# Load the required libraries
+library(lubridate)
+library(dplyr)
+
+# Convert 'fecha' and 'first_event_date' columns to date format if they are not already
+# Convert 'fecha' column to Date format
+
+# Convert column1 and column2 to Date objects
+merged$t  <- dmy(merged$fecha)  # Assuming "dd/mm/yyyy" format
+merged$t  <- ymd(merged$first_event_date)  # Assuming "yyyy-mm-dd" format
+
+# Convert the "fecha" column from character to Date
+merged$fecha <- as.Date(merged$fecha, format = "%d/%m/%Y")
+
+# Convert the "first_event_date" column from character to Date
+merged$first_event_date <- as.Date(merged$first_event_date)
+
+# Calculate the number of months between the dates
+merged$t <- as.numeric(interval(merged$fecha, merged$first_event_date) / months(1))
+
+# Round the "t" column to integers
+merged$t <- round(merged$t)
+
+
+```
+
+```{r}
+ # Install the ggplot2 package if not already installed
+library(ggplot2)  # Load the ggplot2 library
+
+# Calculate the average incidents for each t value
+averages <- merged %>%
+  group_by(t) %>%
+  summarize(
+    avg_column1 = mean(causa_respiratoria),
+    avg_column2 = mean(causa_circulatoria),
+    avg_column3 = mean(causa_polytraumatismo)
+  )
+
+# Create the plot
+ggplot(averages, aes(x = t)) +
+  geom_line(aes(y = avg_column1, color = "respiratorio"), size = 1) +
+  geom_line(aes(y = avg_column2, color = "circulatorio"), size = 1) +
+  geom_line(aes(y = avg_column3, color = "polytraumatismo"), size = 1) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +  # Add vertical line at t = 0
+  labs(
+    title = "Número pormedio de incidentes en relación a la fecha de la primera cuarentena",
+    x = "t",
+    y = "Número promedio de incidentes"
+  ) +
+  scale_color_manual(
+    name = "Causa",
+    values = c("respiratorio" = "red", "circulatorio" = "blue", "polytraumatismo" = "green")
+  ) +
+  theme_minimal()
+
+
+
+```
+
+
